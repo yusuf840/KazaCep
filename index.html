@@ -1,11 +1,20 @@
-<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>KazaCep</title><link rel="stylesheet" href="KazaCep.css"></head><body><div id="app"></div><div id="rep"></div><script>
+<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>KazaCep</title><link rel="stylesheet" href="KazaCep.css"></head><body><script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-auth-compat.js"></script><script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore-compat.js"></script><div id="app"></div><div id="rep"></div><script>
 const $=s=>document.querySelector(s),e=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let S={P:{},cases:[],lastSaved:0},cur=null,step=0,pi=1,tab='olay',view='home',db,tm;
-// ---- Depolama: IndexedDB (cihazda, çevrimdışı). Sunucu senkronu için c.synced bayrağı hazır.
+let S={P:{},cases:[],lastSaved:0},cur=null,step=0,pi=1,tab='olay',view='home',db,tm,fbUser=null,fbReady=false,cloudTm,localLoaded=false;
+// ---- Firebase: GitHub Pages üzerinde çalışan web uygulaması için bağlantı.
+const firebaseConfig={apiKey:'AIzaSyDIZSYXJEGHEu6dKMcFCLTfREQRAOJuplM',authDomain:'kazacep-6f00b.firebaseapp.com',projectId:'kazacep-6f00b',storageBucket:'kazacep-6f00b.firebasestorage.app',messagingSenderId:'888725874508',appId:'1:888725874508:web:a5727b26acb1d7a73791e9'};
+let fbdb=null;
+try{firebase.initializeApp(firebaseConfig);fbdb=firebase.firestore();const auth=firebase.auth();auth.onAuthStateChanged(async u=>{if(!u)return;fbUser=u;fbReady=true;if(localLoaded)await pullCloud()});auth.signInAnonymously().catch(x=>console.warn('Anonim Firebase girişi başarısız:',x))}catch(x){console.warn('Firebase başlatılamadı:',x)}
+// ---- Depolama: IndexedDB (cihazda, çevrimdışı) + Firestore bulut yedeği.
 const idb=()=>new Promise(r=>{try{const q=indexedDB.open('kazacep',1);q.onupgradeneeded=()=>q.result.createObjectStore('kv');q.onsuccess=()=>{db=q.result;r()};q.onerror=()=>r()}catch(x){r()}});
 const load=()=>new Promise(r=>{if(!db)return r();try{const g=db.transaction('kv').objectStore('kv').get('s');g.onsuccess=()=>{if(g.result)S=g.result;r()};g.onerror=()=>r()}catch(x){r()}});
-const save=()=>{S.lastSaved=Date.now();clearTimeout(tm);tm=setTimeout(()=>{try{db&&db.transaction('kv','readwrite').objectStore('kv').put(S,'s')}catch(x){}},250)};
-const sync=()=>{/* İleride: navigator.onLine iken synced:false dosyaları sunucuya gönder */};addEventListener('online',sync);
+const isMedia=x=>typeof x==='string'&&x.startsWith('data:');
+const cloudClean=x=>{if(Array.isArray(x))return x.map(cloudClean);if(x&&typeof x==='object'){const o={};Object.entries(x).forEach(([k,v])=>{if(!isMedia(v))o[k]=cloudClean(v)});return o}return x};
+const mergeCloud=(local,remote)=>{if(Array.isArray(remote))return remote.map((v,i)=>mergeCloud(local?.[i],v));if(remote&&typeof remote==='object'){const o={...local};Object.entries(remote).forEach(([k,v])=>{o[k]=mergeCloud(local?.[k],v)});return o}return remote===null&&isMedia(local)?local:remote};
+const saveCloud=()=>{if(!fbReady||!fbdb)return;clearTimeout(cloudTm);cloudTm=setTimeout(async()=>{try{await fbdb.doc('users/'+fbUser.uid).set({profile:cloudClean(S.P),cases:S.cases.map(cloudClean),updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})}catch(x){console.warn('Bulut kaydı yapılamadı:',x)}},600)};
+const pullCloud=async()=>{try{const snap=await fbdb.doc('users/'+fbUser.uid).get();if(!snap.exists){saveCloud();return}const d=snap.data()||{};if(d.profile)S.P=mergeCloud(S.P,d.profile);if(Array.isArray(d.cases)){const local=new Map(S.cases.map(c=>[String(c.id),c]));const remoteIds=new Set(d.cases.map(c=>String(c.id)));S.cases=d.cases.map(c=>mergeCloud(local.get(String(c.id)),c));S.cases.push(...[...local.entries()].filter(([id])=>!remoteIds.has(id)).map(([,c])=>c));}save();render()}catch(x){console.warn('Bulut verisi okunamadı:',x)}};
+const save=()=>{S.lastSaved=Date.now();clearTimeout(tm);tm=setTimeout(()=>{try{db&&db.transaction('kv','readwrite').objectStore('kv').put(S,'s')}catch(x){}},250);saveCloud()};
+const sync=()=>saveCloud();addEventListener('online',sync);
 const PH=[['Olay yerinin genel görünüşü','Araçların, yolun ve çevrenin tamamı görünecek şekilde fotoğraf çekin.',0],['Kendi aracınızın genel görünüşü','Aracınızın tamamı görünsün.',0],['Kendi aracınızdaki hasar','Hasarlı bölgeleri yakından ve farklı açılardan görüntüleyin. Birden fazla fotoğraf çekebilirsiniz.',1],['Karşı aracın genel görünüşü','Karşı aracın tamamı görünsün.',0],['Karşı aracın hasarı','Hasarlı bölgeleri yakından çekin.',1],['Araç plakaları','Plakaların okunabilir olduğundan emin olun.',0],['Yol ve trafik işaretleri','Levhalar, işaretler ve ışıklar.',1],['Yol çalışması / şerit / çevre','Yol çalışması, şeritler, levhalar, kavşak, yoldaki engeller (varsa).',1],['Diğer önemli detaylar','Fren izi, kırık parçalar, yol hasarı, diğer detaylar (varsa).',1]];
 const TYPES={iki:['🚗','İki araçlı kaza'],tek:['🚙','Tek araçlı kaza'],cok:['🚛','Birden fazla araç'],diger:['⚠️','Diğer']};
 const LEGAL='KazaCep, kaza sonrasında bilgi, fotoğraf ve belge toplama konusunda yardımcı olur. Hukuki danışmanlık, kusur oranı veya resmi kaza değerlendirmesi yapmaz. Resmi tutanağın yerine geçmez.';
@@ -88,5 +97,5 @@ case'next':{const o=order(),po=pord();if(step==3&&pi!=po[po.length-1]){pi=po[po.
 case'edit':cur.done=false;view='wiz';step=order().slice(-1)[0];render(1);break;case'archive':{const c=S.cases.find(x=>x.id==D.v);if(c){c.archived=true;save();render(1)}break;}case'unarchive':{const c=S.cases.find(x=>x.id==D.v);if(c){c.archived=false;save();render(1)}break;}case'delete-case':{if(confirm('Bu kaza dosyası kalıcı olarak silinsin mi?')){S.cases=S.cases.filter(x=>x.id!=D.v);save();view='files';render(1)}break;}
 case'pdf':{const s=sec(cur);$('#rep').innerHTML=`<h1>KAZACEP KAZA DOSYASI</h1>`+TABS.map(([k,l])=>`<h2>${l}</h2>${s[k]}`).join('')+`<p style="font-size:10pt;margin-top:20px">${LEGAL}</p>`;setTimeout(()=>print(),150);break}
 case'wipe':if(confirm('Tüm kaza dosyaları ve belgeler silinsin mi?')){S={P:{},cases:[],lastSaved:0};save();view='home';render(1)}}});
-idb().then(load).then(()=>render());
+idb().then(load).then(()=>{localLoaded=true;render();if(fbReady)pullCloud()});
 </script></body></html>
