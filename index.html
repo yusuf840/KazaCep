@@ -2,7 +2,7 @@
 const $=s=>document.querySelector(s),e=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let S={P:{},cases:[],lastSaved:0},cur=null,step=0,pi=1,tab='olay',view='home',db,tm,fbUser=null,fbReady=false,cloudTm,localLoaded=false;
 // ---- Firebase: GitHub Pages üzerinde çalışan web uygulaması için bağlantı.
-const firebaseConfig={apiKey:'AIzaSyDIZSYXJEGHEu6dKMcFCLTfREQRAOJuplM',authDomain:'kazacep-6f00b.firebaseapp.com',projectId:'kazacep-6f00b',storageBucket:'kazacep-6f00b.firebasestorage.app',messagingSenderId:'888725874508',appId:'1:888725874508:web:a5727b26acb1d7a73791e9'};
+const firebaseConfig={apiKey:'AIzaSyDIZSYXJEGHEu6DkMcFCLTfREQRAOJuplM',authDomain:'kazacep-6f00b.firebaseapp.com',projectId:'kazacep-6f00b',storageBucket:'kazacep-6f00b.firebasestorage.app',messagingSenderId:'888725874508',appId:'1:888725874508:web:a5727b26acb1d7a73791e9'};
 let fbdb=null;
 try{firebase.initializeApp(firebaseConfig);fbdb=firebase.firestore();const auth=firebase.auth();auth.onAuthStateChanged(async u=>{if(!u)return;fbUser=u;fbReady=true;if(localLoaded)await pullCloud()});auth.signInAnonymously().catch(x=>console.warn('Anonim Firebase girişi başarısız:',x))}catch(x){console.warn('Firebase başlatılamadı:',x)}
 // ---- Depolama: IndexedDB (cihazda, çevrimdışı) + Firestore bulut yedeği.
